@@ -121,48 +121,49 @@ async function createTabsSafe(tabs, tryRestoreOpeners, hideTabs = true) {
 
     self.skipCreateTab = true;
 
-    if (tryRestoreOpeners && isEnabledTreeTabsExt && tabs.some(tab => tab.openerTabId)) {
-        log.log('tryRestoreOpeners');
-        for (let tab of tabs) {
-            if (tab.id && tab.openerTabId) {
-                tab.openerTabId = oldNewTabIds[tab.openerTabId];
+    try {
+        if (tryRestoreOpeners && isEnabledTreeTabsExt && tabs.some(tab => tab.openerTabId)) {
+            log.log('tryRestoreOpeners');
+            for (let tab of tabs) {
+                if (tab.id && tab.openerTabId) {
+                    tab.openerTabId = oldNewTabIds[tab.openerTabId];
+                }
+
+                let newTab = await Tabs.createNative(tab);
+
+                if (tab.id) {
+                    oldNewTabIds[tab.id] = newTab.id;
+                }
+
+                newTabs.push(newTab);
             }
-
-            let newTab = await Tabs.createNative(tab);
-
-            if (tab.id) {
-                oldNewTabIds[tab.id] = newTab.id;
-            }
-
-            newTabs.push(newTab);
+        } else {
+            log.log('creating tabs');
+            tabs.forEach(tab => delete tab.openerTabId);
+            newTabs = await Promise.all(tabs.map(Tabs.createNative));
         }
-    } else {
-        log.log('creating tabs');
-        tabs.forEach(tab => delete tab.openerTabId);
-        newTabs = await Promise.all(tabs.map(Tabs.createNative));
+
+        newTabs = await Promise.all(newTabs.map(Cache.setTabSession));
+
+        newTabs = await Tabs.moveNative(newTabs, {
+            index: -1,
+        });
+
+        if (hideTabs) {
+            const tabsToHide = newTabs.filter(tab => !tab.pinned && tab.groupId && !Cache.getWindowId(tab.groupId));
+
+            log.log('hide tabs', tabsToHide);
+
+            await Tabs.safeHide(tabsToHide);
+        }
+
+        log.stop();
+
+        return newTabs;
+    } finally {
+        self.skipCreateTab = false;
+        self.groupIdForNextTab = null;
     }
-
-    self.skipCreateTab = false;
-
-    self.groupIdForNextTab = null;
-
-    newTabs = await Promise.all(newTabs.map(Cache.setTabSession));
-
-    newTabs = await Tabs.moveNative(newTabs, {
-        index: -1,
-    });
-
-    if (hideTabs) {
-        const tabsToHide = newTabs.filter(tab => !tab.pinned && tab.groupId && !Cache.getWindowId(tab.groupId));
-
-        log.log('hide tabs', tabsToHide);
-
-        await Tabs.safeHide(tabsToHide);
-    }
-
-    log.stop();
-
-    return newTabs;
 }
 
 function sendExternalMessage(...args) {

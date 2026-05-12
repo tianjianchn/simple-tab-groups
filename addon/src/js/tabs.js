@@ -10,6 +10,10 @@ import * as Windows from './windows.js';
 
 const logger = new Logger('Tabs');
 
+function isInvalidTabIdError(error) {
+    return String(error?.message || '').includes('Invalid tab ID');
+}
+
 export async function createNative({url, active, pinned, title, index, windowId, openerTabId, cookieStoreId, newTabContainer, ifDifferentContainerReOpen, excludeContainersForReOpen, groupId, favIconUrl, thumbnail}) {
     const tab = {};
 
@@ -554,12 +558,20 @@ export async function moveNative(tabs, moveProperties = {}) {
 
     const log = logger.start('moveNative', {moveProperties}, tabIds);
 
+    const filterExistingTabs = async tabsToFilter => {
+        const existingTabIds = await filterExist(tabsToFilter, true),
+            existingTabIdsSet = new Set(existingTabIds);
+
+        return [
+            tabsToFilter.filter(tab => existingTabIdsSet.has(extractId(tab))),
+            existingTabIds,
+        ];
+    };
+
+    [tabs, tabIds] = await filterExistingTabs(tabs);
+
     if (moveProperties.windowId) { // try fix bug when tab lose it's openerTabId after moving between windows
-        tabs = await filterExist(tabIds);
         openerTabIds = tabs.map(tab => tab.openerTabId);
-        tabIds = tabs.map(extractId);
-    } else {
-        tabIds = await filterExist(tabIds, true);
     }
 
     if (!tabIds.length) {
@@ -567,13 +579,14 @@ export async function moveNative(tabs, moveProperties = {}) {
         return [];
     }
 
-    let movedTabs = await browser.tabs.move(tabIds, moveProperties).catch(log.onCatch(['move', tabIds])),
-        movedTabsObj = Utils.arrayToObj(movedTabs, 'id'),
-        movedTabIdsSet = new Set(tabIds);
+    const moveTabs = moveTabIds => browser.tabs.move(moveTabIds, moveProperties);
 
-    log.stop(tabIds);
-    return tabs
-        .map(function(tab, index) {
+    const applyMovedTabs = movedTabs => {
+        const movedTabsList = (Array.isArray(movedTabs) ? movedTabs : movedTabs ? [movedTabs] : []).filter(Boolean),
+            movedTabsObj = Utils.arrayToObj(movedTabsList, 'id'),
+            movedTabIdsSet = new Set(movedTabsList.map(extractId));
+
+        tabs.forEach(function(tab, index) {
             if (!movedTabIdsSet.has(tab.id)) {
                 return;
             }
@@ -595,10 +608,63 @@ export async function moveNative(tabs, moveProperties = {}) {
             if (movedTabsObj[tab.id]) {
                 tab.index = movedTabsObj[tab.id].index;
             }
+        });
 
-            return tab;
-        })
-        .filter(Boolean);
+        return tabs;
+    };
+
+    let movedTabs;
+
+    try {
+        movedTabs = await moveTabs(tabIds);
+    } catch (error) {
+        if (!isInvalidTabIdError(error)) {
+            log.onCatch(['move', tabIds])(error);
+        }
+
+        log.warn('retry move after invalid tab id', tabIds);
+
+        await Utils.wait(100);
+
+        [tabs, tabIds] = await filterExistingTabs(tabs);
+
+        if (!tabIds.length) {
+            log.stop('tabs are empty after retry');
+            return [];
+        }
+
+        if (moveProperties.windowId) {
+            openerTabIds = tabs.map(tab => tab.openerTabId);
+        }
+
+        try {
+            movedTabs = await moveTabs(tabIds);
+        } catch (retryError) {
+            if (!isInvalidTabIdError(retryError)) {
+                log.onCatch(['move', tabIds])(retryError);
+            }
+
+            log.warn('fallback move tabs one by one', tabIds);
+
+            movedTabs = [];
+
+            for (const tab of tabs) {
+                try {
+                    const movedTab = await moveTabs([tab.id]),
+                        movedTabList = Array.isArray(movedTab) ? movedTab : [movedTab];
+
+                    movedTabs.push(...movedTabList.filter(Boolean));
+                } catch (moveOneError) {
+                    if (!isInvalidTabIdError(moveOneError)) {
+                        log.onCatch(['move', [tab.id]])(moveOneError);
+                    }
+                }
+            }
+        }
+    }
+
+    log.stop(tabIds);
+    return applyMovedTabs(movedTabs);
 }
 
 export async function setMute(tabs, muted) {
