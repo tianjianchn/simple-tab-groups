@@ -35,14 +35,15 @@ function reloadState() {
 }
 
 function isAutoDebug() {
-    return window.localStorage.enableDebug == 2;
+    // return window.localStorage.enableDebug == 2;
+    return false
 }
 
 function enableDebug() {
-    window.localStorage.enableDebug = 1;
-    debugStatus.classList = 'enabled';
-    enableDebugButton.classList.add('hidden');
-    disableDebugButton.classList.remove('hidden');
+    // window.localStorage.enableDebug = 1;
+    // debugStatus.classList = 'enabled';
+    // enableDebugButton.classList.add('hidden');
+    // disableDebugButton.classList.remove('hidden');
 }
 
 async function disableDebug() {

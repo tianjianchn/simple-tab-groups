@@ -350,7 +350,7 @@ function errorEventHandler(event) {
     event.preventDefault?.();
     event.stopImmediatePropagation?.();
 
-    self.localStorage.enableDebug = 2;
+  // self.localStorage.enableDebug = 2;
 
     const logger = this instanceof Logger ? this : self.logger;
 
