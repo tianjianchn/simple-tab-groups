@@ -49,6 +49,18 @@ export default {
         <template v-slot="{data}">
             <ul v-if="data" class="is-unselectable">
                 <li
+                    v-if="menu.includes('discard') && !data.group.isArchive"
+                    @click="$emit('discard', data.group)">
+                    <img src="/icons/snowflake.svg" class="size-16" />
+                    <span v-text="lang('hotkeyActionTitleDiscardGroup')"></span>
+                </li>
+                <li
+                    v-if="menu.includes('discard-other') && groups.length > 1"
+                    @click="$emit('discard-other', data.group)">
+                    <img src="/icons/snowflake.svg" class="size-16" />
+                    <span v-text="lang('hotkeyActionTitleDiscardOtherGroups')"></span>
+                </li>
+                <li
                     v-if="menu.includes('open-in-new-window') && !data.group.isArchive"
                     @click="$emit('open-in-new-window', data.group)">
                     <img src="/icons/window-new.svg" class="size-16" />
@@ -65,18 +77,6 @@ export default {
                     @click="$emit('sort', 'desc')">
                     <img src="/icons/sort-alpha-desc.svg" class="size-16" />
                     <span v-text="lang('sortGroupsZA')"></span>
-                </li>
-                <li
-                    v-if="menu.includes('discard') && !data.group.isArchive"
-                    @click="$emit('discard', data.group)">
-                    <img src="/icons/snowflake.svg" class="size-16" />
-                    <span v-text="lang('hotkeyActionTitleDiscardGroup')"></span>
-                </li>
-                <li
-                    v-if="menu.includes('discard-other') && groups.length > 1"
-                    @click="$emit('discard-other', data.group)">
-                    <img src="/icons/snowflake.svg" class="size-16" />
-                    <span v-text="lang('hotkeyActionTitleDiscardOtherGroups')"></span>
                 </li>
                 <li
                     v-if="menu.includes('export-to-bookmarks')"
